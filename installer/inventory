@@ -160,6 +160,5 @@ secret_key=awxsecret
 # if file is absent
 #extra_nginx_include="/etc/nginx/awx_extra[.]conf"
 
-# Uncomment these lines to set the parameters if you are building for non-Intel
-# architectures
-arch_suffix=".ppc64le"
+# Set this to ".ppc64le" when building for Power platform
+arch_suffix=""
