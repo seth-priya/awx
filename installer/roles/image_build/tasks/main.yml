@@ -45,7 +45,7 @@
   docker_image:
     build:
       path: "{{ role_path }}/files"
-      dockerfile: Dockerfile.sdist
+      dockerfile: "Dockerfile.sdist{{ arch_suffix }}"
       pull: false
       args:
         http_proxy: "{{ http_proxy | default('') }}"
@@ -106,13 +106,13 @@
 
 - name: Template web Dockerfile
   template:
-    src: Dockerfile.j2
+    src: "Dockerfile.j2{{ arch_suffix }}"
     dest: "{{ docker_base_path }}/Dockerfile"
   delegate_to: localhost
 
 - name: Template task Dockerfile
   template:
-    src: Dockerfile.task.j2
+    src: "Dockerfile.task.j2{{ arch_suffix }}"
     dest: "{{ docker_base_path }}/Dockerfile.task"
   delegate_to: localhost
 
