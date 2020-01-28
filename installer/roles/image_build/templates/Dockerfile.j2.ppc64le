@@ -1,4 +1,4 @@
-FROM centos:7
+FROM registry.access.redhat.com/ubi8/python-36
 
 USER root
 
@@ -10,11 +10,14 @@ enabled=1 \n\
 gpgcheck=1 \n\
 gpgkey=ftp://public.dhe.ibm.com/software/server/POWER/Linux/toolchain/at/redhat/RHEL7/gpg-pubkey-6976a827-5164221b \n' > /etc/yum.repos.d/advance-toolchain.repo
 
+ADD centos.repo /etc/yum.repos.d/centos.repo
+
 # sync with installer/roles/image_build/templates/Dockerfile.j2
-RUN yum -y update && \
+RUN wget https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official -O /etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial && \
+  yum -y update && \
   yum -y install epel-release && \
   yum install -y advance-toolchain-at10.0-devel.ppc64le && \
-  yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-ppc64le/pgdg-redhat-repo-latest.noarch.rpm && \
+#  yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-ppc64le/pgdg-redhat-repo-latest.noarch.rpm && \
   yum -y install acl \
   ansible \
   bubblewrap \
@@ -26,7 +29,7 @@ RUN yum -y update && \
   krb5-workstation \
   libcurl-devel \
   libffi-devel \
-  libstdc++.so.6 \
+  libstdc++ \
   libtool-ltdl-devel \
   libcgroup-tools \
   make \
@@ -52,8 +55,9 @@ RUN yum -y update && \
   vim-minimal \
   xmlsec1 \
   xmlsec1-devel \
-  xmlsec1-openssl \
+  xmlsec1-openssl \ 
   xmlsec1-openssl-devel 
+
 
 ADD https://github.com/krallin/tini/releases/download/v0.18.0/tini-ppc64el /tini
 RUN chmod +x /tini
@@ -73,7 +77,15 @@ ADD requirements/requirements_ansible.txt \
     requirements/requirements_tower_uninstall.txt \
     requirements/requirements_git.txt \
     /tmp/requirements/
-RUN cd /tmp && VENV_BASE="/var/lib/awx/venv" make requirements_awx requirements_ansible_py3
+
+RUN cd /tmp && export VENV_BASE="/var/lib/awx/venv" && \
+        mkdir -p $VENV_BASE/awx/bin && \
+	mkdir -p $VENV_BASE/ansible/bin && \
+	ln -s /opt/app-root/bin/pip3 $VENV_BASE/awx/bin/pip && \
+	ln -s /opt/app-root/bin/pip3 $VENV_BASE/awx/bin/pip3 && \
+	ln -s /opt/app-root/bin/pip3 $VENV_BASE/ansible/bin/pip3 && \
+    PYTHON_VERSION=$(python3 -c "from distutils.sysconfig import get_python_version; print(get_python_version())") && mkdir -p "$VENV_BASE/awx/lib/python$PYTHON_VERSION/" && \
+	make requirements_awx requirements_ansible_py3
 
 RUN yum -y --setopt=tsflags=noscripts remove *-devel \
   gcc \
