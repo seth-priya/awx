@@ -1,14 +1,15 @@
-FROM centos:7
+FROM registry.access.redhat.com/ubi8/python-36
 
+USER root
 ENV NODE_VERSION=v10.17.0
-RUN yum -y update && yum -y install epel-release
+RUN yum -y update
 
 RUN yum install -y bzip2 \
     gcc-c++ \
     gettext \
     git \
     make \
-    python36-setuptools
+    python3-setuptools
 
 # Use the distro provided npm to bootstrap our required version of node
 RUN  curl https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-ppc64le.tar.gz| tar zxf - -C /
