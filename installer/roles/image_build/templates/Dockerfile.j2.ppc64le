@@ -1,4 +1,4 @@
-FROM centos:7
+FROM centos:8
 
 USER root
 
@@ -11,11 +11,12 @@ gpgcheck=1 \n\
 gpgkey=ftp://public.dhe.ibm.com/software/server/POWER/Linux/toolchain/at/redhat/RHEL7/gpg-pubkey-6976a827-5164221b \n' > /etc/yum.repos.d/advance-toolchain.repo
 
 # sync with installer/roles/image_build/templates/Dockerfile.j2
-RUN yum -y update && \
-  yum -y install epel-release && \
-  yum install -y advance-toolchain-at10.0-devel.ppc64le && \
-  yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-ppc64le/pgdg-redhat-repo-latest.noarch.rpm && \
-  yum -y install acl \
+RUN dnf -y update && \
+  dnf -y install epel-release 'dnf-command(config-manager)' && \
+  dnf module -y enable 'postgresql:10' && \
+  dnf config-manager --set-enabled PowerTools && \
+  dnf -y install advance-toolchain-at10.0-devel.ppc64le && \
+  dnf -y install acl \
   ansible \
   bubblewrap \
   curl \
@@ -26,7 +27,7 @@ RUN yum -y update && \
   krb5-workstation \
   libcurl-devel \
   libffi-devel \
-  libstdc++.so.6 \
+  libstdc++ \
   libtool-ltdl-devel \
   libcgroup-tools \
   make \
@@ -38,6 +39,7 @@ RUN yum -y update && \
   patch \
   @postgresql:10 \
   postgresql-devel \
+  python3 \
   python3-devel \
   python3-libselinux \
   python3-pip \
