@@ -1,0 +1,25 @@
+FROM registry.access.redhat.com/ubi8/python-36
+
+USER root
+ENV NODE_VERSION=v10.17.0
+RUN yum -y update
+
+RUN yum install -y bzip2 \
+    gcc-c++ \
+    gettext \
+    git \
+    make \
+    python3-setuptools
+
+# Use the distro provided npm to bootstrap our required version of node
+RUN  curl https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-ppc64le.tar.gz| tar zxf - -C /
+ENV PATH ${PATH}:/node-${NODE_VERSION}-linux-ppc64le/bin
+
+RUN npm install -g n
+RUN n 10.17.0
+ENV PATH=/usr/local/n/versions/node/10.17.0/bin:$PATH
+
+WORKDIR "/awx"
+
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["make sdist"]

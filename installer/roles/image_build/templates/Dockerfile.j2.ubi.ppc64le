@@ -1,0 +1,155 @@
+FROM registry.access.redhat.com/ubi8/python-36
+
+USER root
+
+RUN echo $'[advance-toolchain] \n\
+name=Advance Toolchain IBM FTP \n\
+baseurl=ftp://public.dhe.ibm.com/software/server/POWER/Linux/toolchain/at/redhat/RHEL7 \n\
+failovermethod=priority \n\
+enabled=1 \n\
+gpgcheck=1 \n\
+gpgkey=ftp://public.dhe.ibm.com/software/server/POWER/Linux/toolchain/at/redhat/RHEL7/gpg-pubkey-6976a827-5164221b \n' > /etc/yum.repos.d/advance-toolchain.repo
+
+ADD centos.repo /etc/yum.repos.d/centos.repo
+
+# sync with installer/roles/image_build/templates/Dockerfile.j2
+RUN wget https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official -O /etc/pki/rpm-gpg/RPM-GPG-KEY-centosofficial && \
+  yum -y update && \
+  yum -y install epel-release && \
+  yum install -y advance-toolchain-at10.0-devel.ppc64le && \
+#  yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-ppc64le/pgdg-redhat-repo-latest.noarch.rpm && \
+  yum -y install acl \
+  ansible \
+  bubblewrap \
+  curl \
+  gcc \
+  gcc-c++ \
+  git-core \
+  glibc-langpack-en \
+  krb5-workstation \
+  libcurl-devel \
+  libffi-devel \
+  libstdc++ \
+  libtool-ltdl-devel \
+  libcgroup-tools \
+  make \
+  mercurial \
+  nginx \
+  nss \
+  openldap-devel \
+  openssh-server \
+  patch \
+  @postgresql:10 \
+  postgresql-devel \
+  python3-devel \
+  python3-libselinux \
+  python3-pip \
+  python3-psycopg2 \
+  python3-setuptools \
+  rsync \
+  subversion \
+  sudo \
+  swig \
+  tmux \
+  unzip \
+  vim-minimal \
+  xmlsec1 \
+  xmlsec1-devel \
+  xmlsec1-openssl \ 
+  xmlsec1-openssl-devel 
+
+
+ADD https://github.com/krallin/tini/releases/download/v0.18.0/tini-ppc64el /tini
+RUN chmod +x /tini
+
+RUN  curl https://nodejs.org/dist/v8.4.0/node-v8.4.0-linux-ppc64le.tar.gz| tar zxf - -C /
+ENV PATH ${PATH}:/node-v8.4.0-linux-ppc64le/bin
+
+RUN python3 -m ensurepip && pip3 install virtualenv
+RUN pip3 install supervisor
+
+ADD Makefile /tmp/Makefile
+RUN mkdir /tmp/requirements
+ADD requirements/requirements_ansible.txt \
+    requirements/requirements_ansible_uninstall.txt \
+    requirements/requirements_ansible_git.txt \
+    requirements/requirements.txt \
+    requirements/requirements_tower_uninstall.txt \
+    requirements/requirements_git.txt \
+    /tmp/requirements/
+
+RUN cd /tmp && export VENV_BASE="/var/lib/awx/venv" && \
+        mkdir -p $VENV_BASE/awx/bin && \
+	mkdir -p $VENV_BASE/ansible/bin && \
+	ln -s /opt/app-root/bin/pip3 $VENV_BASE/awx/bin/pip && \
+	ln -s /opt/app-root/bin/pip3 $VENV_BASE/awx/bin/pip3 && \
+	ln -s /opt/app-root/bin/pip3 $VENV_BASE/ansible/bin/pip3 && \
+    PYTHON_VERSION=$(python3 -c "from distutils.sysconfig import get_python_version; print(get_python_version())") && mkdir -p "$VENV_BASE/awx/lib/python$PYTHON_VERSION/" && \
+	make requirements_awx requirements_ansible_py3
+
+RUN yum -y --setopt=tsflags=noscripts remove *-devel \
+  gcc \
+  gcc-c++
+
+# makes postgres available for data migrations when upgrading
+RUN export PATH=/usr/pgsql-10/bin:$PATH
+
+RUN yum -y clean all
+RUN rm -rf /root/.cache
+
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+RUN ln -s /var/lib/awx/venv/awx/bin/awx-manage /usr/bin/awx-manage
+RUN rm -rf /tmp/*
+
+RUN echo "{{ awx_version }}" > /var/lib/awx/.tower_version
+COPY {{ awx_sdist_file }} /tmp/{{ awx_sdist_file }}
+RUN OFFICIAL=yes /var/lib/awx/venv/awx/bin/pip install /tmp/{{ awx_sdist_file }}
+
+ADD settings.py /etc/tower/settings.py
+ADD supervisor.conf /supervisor.conf
+ADD supervisor_task.conf /supervisor_task.conf
+ADD launch_awx.sh /usr/bin/launch_awx.sh
+ADD launch_awx_task.sh /usr/bin/launch_awx_task.sh
+ADD config-watcher /usr/bin/config-watcher
+RUN chmod +rx /usr/bin/launch_awx.sh && \
+    chmod +rx /usr/bin/launch_awx_task.sh && \
+    chmod +rx /usr/bin/config-watcher
+
+# Install OpenShift CLI
+RUN cd /usr/local/bin && \
+    curl -L https://github.com/openshift/origin/releases/download/v3.11.0/openshift-origin-client-tools-v3.11.0-0cbc58b-linux-64bit.tar.gz | \
+    tar -xz --strip-components=1 --wildcards --no-anchored 'oc'
+
+RUN cd /usr/local/bin && \
+	curl -L https://dl.k8s.io/v1.16.0/kubernetes-client-linux-ppc64le.tar.gz | \
+	tar -xz --strip-components=1 --wildcards --no-anchored 'kubectl' 
+
+ENV PATH=${PATH}:/usr/local/bin/client/bin
+
+RUN find /var/lib/awx -not -path '/var/lib/awx/venv*' | xargs chgrp root
+RUN find /var/lib/awx -not -path '/var/lib/awx/venv*' | xargs chmod g+w
+
+# Pre-create things that we need to write to
+RUN for dir in /home/awx /var/log/tower /var/log/nginx /var/lib/nginx; \
+  do mkdir -p $dir; chmod -R g+rwx $dir; chgrp -R root $dir; done
+
+RUN for file in /etc/passwd /var/run/nginx.pid; \
+  do touch $file; chmod -R g+rwx $file; chgrp -R root $file; done
+
+# https://github.com/ansible/awx/issues/5224
+RUN chmod u+s /usr/bin/bwrap
+
+VOLUME /var/lib/nginx
+RUN ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
+
+ENV HOME=/home/awx
+WORKDIR ${HOME}
+USER 1000
+EXPOSE 8052
+
+ENTRYPOINT ["/tini", "--"]
+CMD /usr/bin/launch_awx.sh

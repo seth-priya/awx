@@ -173,6 +173,12 @@
     dest: "{{ docker_base_path }}/Makefile"
   delegate_to: localhost
 
+- name: Stage CentOS Repo
+  copy:
+    src: ../external_repositories/centos.repo
+    dest: "{{ docker_base_path }}/centos.repo"
+  delegate_to: localhost
+
 - name: Build base web image
   docker_image:
     build:
